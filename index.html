@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WAVFORM — Audio Converter</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #222222;
+      --accent: #e8ff47;
+      --accent2: #ff4757;
+      --text: #f0f0f0;
+      --muted: #555;
+      --success: #47ffb2;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(232,255,71,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232,255,71,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .wrapper { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 24px 16px 100px; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+    .logo { font-weight: 800; font-size: 1.8rem; letter-spacing: -2px; line-height: 1; }
+    .logo span { color: var(--accent); }
+    .tagline { font-family: var(--mono); font-size: .65rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+    .drop-zone { border: 1.5px dashed var(--border); border-radius: 4px; padding: 40px 20px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; overflow: hidden; }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(232,255,71,.03); }
+    .drop-zone.drag-over::after { content: '放手'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; color: var(--accent); background: rgba(10,10,10,.9); }
+    .drop-icon { width: 48px; height: 48px; margin: 0 auto 16px; opacity: .3; }
+    .drop-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .drop-sub { font-family: var(--mono); font-size: .7rem; color: var(--muted); margin-bottom: 20px; }
+    .btn-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .btn { font-family: var(--mono); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; padding: 10px 18px; border: 1.5px solid var(--border); background: transparent; color: var(--text); cursor: pointer; border-radius: 2px; transition: all .15s; white-space: nowrap; }
+    .btn:active { transform: scale(.97); }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+    .btn.danger { border-color: var(--accent2); color: var(--accent2); }
+    .btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+    #file-list { margin-top: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .file-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; }
+    .file-item.done { border-color: var(--success); }
+    .file-item.error { border-color: var(--accent2); }
+    .file-item.active { border-color: var(--accent); }
+    .file-name { font-family: var(--mono); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-size { font-family: var(--mono); font-size: .65rem; color: var(--muted); white-space: nowrap; }
+    .file-status { font-family: var(--mono); font-size: .65rem; white-space: nowrap; min-width: 70px; text-align: right; }
+    .file-status.pending { color: var(--muted); }
+    .file-status.converting { color: var(--accent); }
+    .file-status.done { color: var(--success); }
+    .file-status.error { color: var(--accent2); }
+    .progress-wrap { margin-top: 20px; display: none; }
+    .progress-wrap.visible { display: block; }
+    .progress-label { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-bottom: 6px; }
+    .progress-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width .3s ease; }
+    .controls { margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .controls-right { margin-left: auto; display: flex; gap: 10px; }
+    #log { margin-top: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; padding: 12px; font-family: var(--mono); font-size: .68rem; color: var(--muted); max-height: 200px; overflow-y: auto; }
+    .log-line { line-height: 1.7; word-break: break-all; }
+    .log-line.ok { color: var(--success); }
+    .log-line.err { color: var(--accent2); }
+    .log-line.info { color: var(--accent); }
+    .status-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: .65rem; color: var(--muted); z-index: 100; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .status-dot.ready { background: var(--success); }
+    .status-dot.loading { background: var(--accent); animation: pulse 1s infinite; }
+    .status-dot.error { background: var(--accent2); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .wave-bars { display: flex; align-items: center; gap: 2px; height: 18px; }
+    .wave-bar { width: 3px; background: var(--accent); border-radius: 2px; animation: wave 1.2s ease-in-out infinite; }
+    .wave-bar:nth-child(1) { animation-delay: 0s; }
+    .wave-bar:nth-child(2) { animation-delay: .1s; }
+    .wave-bar:nth-child(3) { animation-delay: .2s; }
+    .wave-bar:nth-child(4) { animation-delay: .3s; }
+    .wave-bar:nth-child(5) { animation-delay: .4s; }
+    @keyframes wave { 0%, 100% { height: 4px; } 50% { height: 18px; } }
+    .wave-bars.idle .wave-bar { animation: none; height: 4px; background: var(--muted); }
+    #summary { margin-top: 20px; padding: 16px 20px; background: rgba(71,255,178,.06); border: 1px solid var(--success); border-radius: 2px; display: none; }
+    #summary.visible { display: block; }
+    .summary-title { font-weight: 700; font-size: .9rem; color: var(--success); margin-bottom: 10px; }
+    .summary-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-val { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; color: var(--success); }
+    .stat-label { font-family: var(--mono); font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    #file-input, #folder-input { display: none; }
+    .load-progress { flex: 1; max-width: 180px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .load-progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease; }
+    #load-percent { font-family: var(--mono); font-size: .65rem; color: var(--muted); min-width: 32px; text-align: right; }
+    #status-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .loading-overlay { position: fixed; inset: 0; background: rgba(10,10,10,.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; transition: opacity .3s; }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    .loading-content { text-align: center; padding: 20px; }
+    .loading-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 20px; }
+    .loading-title span { color: var(--accent); }
+    .loading-bar-wrap { width: 280px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+    .loading-bar { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+    .loading-text { font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+    .loading-cache-hint { font-family: var(--mono); font-size: .65rem; color: var(--accent); margin-top: 16px; opacity: 0; transition: opacity .3s; }
+    .loading-cache-hint.visible { opacity: 1; }
+    @media (max-width: 600px) {
+      .wrapper { padding: 16px 12px 90px; }
+      .logo { font-size: 1.4rem; }
+      .drop-zone { padding: 30px 16px; }
+      .btn { font-size: .68rem; padding: 8px 14px; }
+      .controls-right { margin-left: 0; width: 100%; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-content">
+    <div class="loading-title">WAV<span>FORM</span></div>
+    <div class="loading-bar-wrap">
+      <div class="loading-bar" id="loading-bar"></div>
+    </div>
+    <div class="loading-text" id="loading-text">正在初始化...</div>
+    <div class="loading-cache-hint" id="cache-hint">✓ 已从缓存加载</div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <header>
+    <div>
+      <div class="logo">WAV<span>FORM</span></div>
+      <div class="tagline" style="margin-top:4px">浏览器音频转换 · 离线可用</div>
+    </div>
+    <div style="text-align:right">
+      <div class="tagline">FFmpeg.wasm</div>
+      <div class="tagline" style="margin-top:4px;color:#333">100% 本地处理</div>
+    </div>
+  </header>
+
+  <div class="drop-zone" id="drop-zone">
+    <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+    </svg>
+    <div class="drop-title">拖拽音频文件到这里</div>
+    <div class="drop-sub">MP3 · WAV · FLAC · AAC · OGG · M4A 等</div>
+    <div class="btn-group">
+      <button class="btn" onclick="document.getElementById('file-input').click()">选择文件</button>
+      <button class="btn" onclick="document.getElementById('folder-input').click()">选择文件夹</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" multiple accept="audio/*,.flac,.ape,.wma,.aiff,.aif,.m4a,.ogg,.opus,.wav,.mp3,.aac,.wv,.tta,.mka">
+  <input type="file" id="folder-input" webkitdirectory multiple>
+
+  <div id="file-list"></div>
+
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-label">
+      <span id="progress-text">准备中...</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls" style="display:none">
+    <div class="wave-bars idle" id="wave-bars">
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+    </div>
+    <div class="controls-right">
+      <button class="btn danger" id="btn-clear">清空</button>
+      <button class="btn primary" id="btn-start">开始转换</button>
+    </div>
+  </div>
+
+  <div id="log"></div>
+
+  <div id="summary">
+    <div class="summary-title">✓ 转换完成</div>
+    <div class="summary-stats">
+      <div class="stat"><div class="stat-val" id="stat-total">0</div><div class="stat-label">总数</div></div>
+      <div class="stat"><div class="stat-val" id="stat-ok">0</div><div class="stat-label">成功</div></div>
+      <div class="stat"><div class="stat-val" id="stat-fail">0</div><div class="stat-label">失败</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="status-dot loading" id="status-dot"></div>
+  <span id="status-text">正在加载 FFmpeg...</span>
+  <div class="load-progress" id="load-progress">
+    <div class="load-progress-bar" id="load-progress-bar"></div>
+  </div>
+  <span id="load-percent">0%</span>
+</div>
+
+<script type="module">
+  // 正确的导入路径
+  import { FFmpeg } from './ffmpeg/dist/esm/index.js';
+  import { fetchFile, toBlobURL } from './ffmpeg/util/dist/esm/index.js';
+
+  let ffmpeg = null;
+  let files = [];
+
+  // DOM 元素
+  const $ = id => document.getElementById(id);
+  const dropZone = $('drop-zone');
+  const fileInput = $('file-input');
+  const folderInput = $('folder-input');
+  const fileList = $('file-list');
+  const controls = $('controls');
+  const btnStart = $('btn-start');
+  const btnClear = $('btn-clear');
+  const progressWrap = $('progress-wrap');
+  const progressFill = $('progress-fill');
+  const progressText = $('progress-text');
+  const progressPct = $('progress-pct');
+  const logEl = $('log');
+  const summaryEl = $('summary');
+  const statusDot = $('status-dot');
+  const statusText = $('status-text');
+  const waveBars = $('wave-bars');
+  const loadingOverlay = $('loading-overlay');
+  const loadingBar = $('loading-bar');
+  const loadingText = $('loading-text');
+  const cacheHint = $('cache-hint');
+
+  function log(msg, type = '') {
+    const line = document.createElement('div');
+    line.className = 'log-line ' + type;
+    line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+    console.log('[WAVFORM]', msg);
+  }
+
+  function updateLoading(pct, text) {
+    loadingText.textContent = text;
+    statusText.textContent = text;
+    loadingBar.style.width = pct + '%';
+    $('load-progress-bar').style.width = pct + '%';
+    $('load-percent').textContent = pct + '%';
+  }
+
+  // IndexedDB 缓存
+  const DB_NAME = 'wavform-v12';
+  const STORE = 'wasm';
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onupgradeneeded = e => {
+        if (!e.target.result.objectStoreNames.contains(STORE)) {
+          e.target.result.createObjectStore(STORE);
+        }
+      };
+    });
+  }
+
+  async function getCache(db, key) {
+    return new Promise(resolve => {
+      const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async function setCache(db, key, blob) {
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, 'readwrite').objectStore(STORE).put(blob, key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function loadFFmpeg() {
+    log('开始加载 FFmpeg...', 'info');
+    
+    ffmpeg = new FFmpeg();
+    
+    ffmpeg.on('log', ({ message }) => {
+      console.log('[FFmpeg]', message);
+    });
+    
+    ffmpeg.on('progress', ({ progress }) => {
+      if (progress > 0) {
+        progressPct.textContent = Math.round(progress * 100) + '%';
+      }
+    });
+
+    try {
+      updateLoading(5, '打开缓存...');
+      const db = await openDB();
+      log('IndexedDB 打开成功');
+      
+      updateLoading(10, '检查缓存...');
+      const cachedWasm = await getCache(db, 'wasm');
+      const cachedCore = await getCache(db, 'core');
+      const cachedWorker = await getCache(db, 'worker');
+
+      let wasmURL, coreURL, workerURL;
+      
+      if (cachedWasm && cachedCore && cachedWorker) {
+        cacheHint.classList.add('visible');
+        log('从缓存加载所有文件', 'ok');
+        updateLoading(60, '从缓存加载...');
+        wasmURL = URL.createObjectURL(cachedWasm);
+        coreURL = URL.createObjectURL(cachedCore);
+        workerURL = URL.createObjectURL(cachedWorker);
+      } else {
+        log('下载本地文件...', 'info');
+        
+        // 下载 wasm
+        updateLoading(15, '下载 wasm...');
+        const wasmResp = await fetch('./ffmpeg/ffmpeg-core.wasm');
+        if (!wasmResp.ok) throw new Error('wasm 下载失败: ' + wasmResp.status);
+        const wasmBlob = await wasmResp.blob();
+        log('wasm 大小: ' + (wasmBlob.size / 1024 / 1024).toFixed(2) + ' MB');
+        
+        // 下载 core.js
+        updateLoading(40, '下载 core.js...');
+        const coreResp = await fetch('./ffmpeg/ffmpeg-core.js');
+        if (!coreResp.ok) throw new Error('core.js 下载失败');
+        const coreBlob = await coreResp.blob();
+        
+        // 下载 worker.js
+        updateLoading(45, '下载 worker.js...');
+        const workerResp = await fetch('./ffmpeg/dist/esm/worker.js');
+        if (!workerResp.ok) throw new Error('worker.js 下载失败');
+        const workerBlob = await workerResp.blob();
+        
+        // 缓存
+        updateLoading(50, '缓存文件...');
+        await setCache(db, 'wasm', wasmBlob);
+        await setCache(db, 'core', coreBlob);
+        await setCache(db, 'worker', workerBlob);
+        log('所有文件已缓存', 'ok');
+        
+        wasmURL = URL.createObjectURL(wasmBlob);
+        coreURL = URL.createObjectURL(coreBlob);
+        workerURL = URL.createObjectURL(workerBlob);
+        updateLoading(60, '文件准备完成');
+      }
+
+      updateLoading(70, '初始化 FFmpeg...');
+      log('开始 ffmpeg.load()...', 'info');
+      
+      await ffmpeg.load({
+        coreURL: coreURL,
+        wasmURL: wasmURL,
+        workerURL: workerURL
+      });
+      
+      log('ffmpeg.load() 完成!', 'ok');
+      updateLoading(100, '就绪');
+
+      setTimeout(() => {
+        loadingOverlay.classList.add('hidden');
+        statusDot.className = 'status-dot ready';
+        statusText.textContent = 'FFmpeg 就绪 · 可以开始转换';
+      }, 300);
+
+    } catch (e) {
+      log('加载失败: ' + e.message, 'err');
+      loadingText.textContent = '加载失败: ' + e.message;
+      statusDot.className = 'status-dot error';
+      statusText.textContent = '加载失败';
+      console.error('FFmpeg load error:', e);
+    }
+  }
+
+  function addFiles(newFiles) {
+    const audioExts = /\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff|aif|ape|opus|wv|tta|mka|ac3|dts|amr|au|ra|mid|midi)$/i;
+    let added = 0;
+
+    for (const f of newFiles) {
+      if (!f.type.startsWith('audio/') && !audioExts.test(f.name)) continue;
+      if (/\.mp3$/i.test(f.name)) {
+        log('跳过（已是 MP3）: ' + f.name, '');
+        continue;
+      }
+      if (files.find(x => x.name === f.name && x.file.size === f.size)) continue;
+      files.push({ file: f, name: f.name, status: 'pending', outputBlob: null });
+      added++;
+    }
+
+    if (added > 0) {
+      renderList();
+      controls.style.display = 'flex';
+      summaryEl.classList.remove('visible');
+    }
+  }
+
+  function renderList() {
+    fileList.innerHTML = '';
+    files.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'file-item ' + (item.status === 'done' ? 'done' : item.status === 'error' ? 'error' : item.status === 'converting' ? 'active' : '');
+      const sizeMB = (item.file.size / 1024 / 1024).toFixed(2);
+      const statusMap = {
+        pending: '<span class="file-status pending">等待中</span>',
+        converting: '<span class="file-status converting">转换中...</span>',
+        done: '<span class="file-status done">✓ 完成</span>',
+        error: '<span class="file-status error">✗ 失败</span>',
+      };
+      el.innerHTML = '<div class="file-name">' + item.name.replace(/\.[^.]+$/, '.mp3') + '</div>' +
+        '<div class="file-size">' + sizeMB + ' MB</div>' + (statusMap[item.status] || '');
+      if (item.status === 'done' && item.outputBlob) {
+        el.style.cursor = 'pointer';
+        el.title = '点击下载';
+        el.onclick = () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(item.outputBlob);
+          a.download = item.name.replace(/\.[^.]+$/, '.mp3');
+          a.click();
+        };
+      }
+      fileList.appendChild(el);
+    });
+  }
+
+  async function startConversion() {
+    if (!ffmpeg) return;
+    if (running) return;
+    let running = true;
+    btnStart.disabled = true;
+    btnClear.disabled = true;
+    waveBars.classList.remove('idle');
+    progressWrap.classList.add('visible');
+    summaryEl.classList.remove('visible');
+
+    const pending = files.filter(f => f.status === 'pending');
+    let done = 0, failed = 0;
+
+    for (let i = 0; i < pending.length; i++) {
+      const item = pending[i];
+      progressFill.style.width = Math.round((i / pending.length) * 100) + '%';
+      progressText.textContent = '转换中 ' + (i + 1) + '/' + pending.length;
+      item.status = 'converting';
+      renderList();
+
+      try {
+        const ext = (item.name.match(/\.([^.]+)$/)?.[1] || '').toLowerCase();
+        const inputName = 'input_' + i + (ext ? '.' + ext : '.audio');
+        const outputName = 'output_' + i + '.mp3';
+
+        await ffmpeg.writeFile(inputName, await fetchFile(item.file));
+
+        const lossless = ['flac', 'wav', 'aiff', 'aif', 'ape', 'wv', 'tta', 'au'].includes(ext);
+        const ffArgs = lossless 
+          ? ['-i', inputName, '-vn', '-c:a', 'libmp3lame', '-q:a', '0', outputName]
+          : ['-i', inputName, '-vn', '-c:a', 'libmp3lame', '-q:a', '2', outputName];
+
+        await ffmpeg.exec(ffArgs);
+
+        const data = await ffmpeg.readFile(outputName);
+        item.outputBlob = new Blob([data.buffer], { type: 'audio/mpeg' });
+        item.status = 'done';
+
+        await ffmpeg.deleteFile(inputName);
+        await ffmpeg.deleteFile(outputName);
+        done++;
+        log('✓ ' + item.name, 'ok');
+      } catch (e) {
+        item.status = 'error';
+        failed++;
+        log('✗ ' + item.name + '：' + (e.message || e), 'err');
+      }
+      renderList();
+    }
+
+    progressFill.style.width = '100%';
+    progressPct.textContent = '100%';
+    waveBars.classList.add('idle');
+    running = false;
+    btnStart.disabled = false;
+    btnClear.disabled = false;
+
+    $('stat-total').textContent = pending.length;
+    $('stat-ok').textContent = done;
+    $('stat-fail').textContent = failed;
+    summaryEl.classList.add('visible');
+    log('完成：' + done + ' 成功，' + failed + ' 失败', done > 0 ? 'ok' : 'err');
+  }
+
+  // 事件绑定
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const items = [...e.dataTransfer.items];
+    const fileArr = [];
+    Promise.all(items.map(item => {
+      if (item.kind !== 'file') return;
+      const entry = item.webkitGetAsEntry?.();
+      if (entry?.isDirectory) {
+        return new Promise(resolve => {
+          entry.createReader().readEntries(entries => {
+            Promise.all(entries.map(e => e.isDirectory ? Promise.resolve() : new Promise(r => e.file(f => { fileArr.push(f); r(); })))).then(resolve);
+          });
+        });
+      } else {
+        const f = item.getAsFile();
+        if (f) fileArr.push(f);
+      }
+    })).then(() => addFiles(fileArr));
+  });
+
+  fileInput.onchange = e => addFiles([...e.target.files]);
+  folderInput.onchange = e => addFiles([...e.target.files]);
+  btnStart.onclick = startConversion;
+  btnClear.onclick = () => {
+    files = [];
+    fileList.innerHTML = '';
+    controls.style.display = 'none';
+    progressWrap.classList.remove('visible');
+    summaryEl.classList.remove('visible');
+  };
+
+  // 启动
+  loadFFmpeg();
+</script>
+</body>
+</html>
